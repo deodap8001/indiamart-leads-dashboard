@@ -1,0 +1,69 @@
+body { background: #f4f6fa; }
+
+.kpi-card { border: none; border-radius: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+.kpi-number { font-size: 2.5rem; font-weight: 700; }
+.kpi-label { font-size: 0.85rem; letter-spacing: 0.5px; text-transform: uppercase; color: #6c757d; }
+.kpi-icon { font-size: 2.2rem; opacity: 0.35; }
+
+.badge-new { background: #0d6efd; }
+.badge-working { background: #fd7e14; }
+.badge-pending { background: #dc3545; }
+
+.kpi-hover { cursor: help; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.kpi-hover:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.10); }
+
+.tooltip-inner { max-width: 280px; text-align: left; padding: 10px 12px; }
+
+.mode-bar { background: #fff; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); padding: 16px 20px; }
+
+.nav-pills .nav-link { color: #495057; font-weight: 500; white-space: nowrap; }
+.nav-pills .nav-link.active { background: #0d6efd; color: #fff; }
+
+.window-label { font-size: 0.9rem; color: #6c757d; }
+
+#cityChartWrap { position: relative; }
+#hourChartWrap { position: relative; min-height: 220px; }
+
+.city-scroll {
+    max-height: 280px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 6px;
+}
+.city-scroll::-webkit-scrollbar { width: 6px; }
+.city-scroll::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 3px; }
+.city-scroll::-webkit-scrollbar-thumb { background: #adb5bd; border-radius: 3px; }
+.city-scroll::-webkit-scrollbar-thumb:hover { background: #6c757d; }
+
+.day-cal {
+    display: inline-block;
+    position: relative;
+    width: 16px;
+    height: 16px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    overflow: hidden;
+    vertical-align: -3px;
+    margin-right: 4px;
+}
+.day-cal-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: currentColor;
+}
+.day-cal-day {
+    position: absolute;
+    top: 3px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    font-weight: 700;
+    line-height: 1;
+}
