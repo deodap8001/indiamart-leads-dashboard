@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IndiaMART Lead Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background: #f4f6fa; }
+        .kpi-card { border: none; border-radius: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+        .kpi-number { font-size: 2.5rem; font-weight: 700; }
+        .kpi-label { font-size: 0.85rem; letter-spacing: 0.5px; text-transform: uppercase; color: #6c757d; }
+        .kpi-icon { font-size: 2.2rem; opacity: 0.35; }
+        .badge-new { background: #0d6efd; }
+        .badge-working { background: #fd7e14; }
+        .badge-pending { background: #dc3545; }
+        .kpi-hover { cursor: help; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .kpi-hover:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.10); }
+        .tooltip-inner { max-width: 280px; text-align: left; padding: 10px 12px; }
+        .mode-bar { background: #fff; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); padding: 16px 20px; }
+        .nav-pills .nav-link { color: #495057; font-weight: 500; white-space: nowrap; }
+        .nav-pills .nav-link.active { background: #0d6efd; color: #fff; }
+        .window-label { font-size: 0.9rem; color: #6c757d; }
+        #cityChartWrap { position: relative; }
+        #hourChartWrap { position: relative; min-height: 220px; }
+        .city-scroll {
+            max-height: 280px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 6px;
+        }
+        .city-scroll::-webkit-scrollbar { width: 6px; }
+        .city-scroll::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 3px; }
+        .city-scroll::-webkit-scrollbar-thumb { background: #adb5bd; border-radius: 3px; }
+        .city-scroll::-webkit-scrollbar-thumb:hover { background: #6c757d; }
+        .day-cal {
+            display: inline-block;
+            position: relative;
+            width: 16px;
+            height: 16px;
+            border: 1px solid currentColor;
+            border-radius: 2px;
+            overflow: hidden;
+            vertical-align: -3px;
+            margin-right: 4px;
+        }
+        .day-cal-top {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: currentColor;
+        }
+        .day-cal-day {
+            position: absolute;
+            top: 3px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 7px;
+            font-weight: 700;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container">
+        <span class="navbar-brand mb-0 h1">
+            <i class="bi bi-graph-up-arrow"></i> IndiaMART Lead Dashboard
+        </span>
+        <div>
+            {% if last_sync %}
+                <span class="text-light me-3 small">Last sync: {{ last_sync }}</span>
+            {% endif %}
+            {% if cooldown_remaining and cooldown_remaining > 0 %}
+                <button class="btn btn-sm btn-outline-light" disabled
+                        data-cooldown="{{ cooldown_remaining }}" id="sync-btn">
+                    <i class="bi bi-hourglass-split"></i> Sync in <span id="cooldown-timer">{{ cooldown_remaining }}</span>s
+                </button>
+            {% else %}
+                <a href="/sync?mode={{ mode }}{% if mode=='single' %}&date={{ selected_date }}{% elif mode=='range' %}&start={{ selected_start }}&end={{ selected_end }}{% endif %}" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-arrow-clockwise"></i> Sync Now
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+
+    <div class="mode-bar mb-4">
+        <ul class="nav nav-pills mb-3" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link {% if mode=='today' %}active{% endif %}" href="/?mode=today">
+                    <span class="day-cal">
+                        <span class="day-cal-top"></span>
+                        <span class="day-cal-day">{{ current_day }}</span>
+                    </span>
+                    Today
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if mode=='single' %}active{% endif %}" href="/?mode=single&date={{ selected_date or today_iso }}">
+                    <i class="bi bi-calendar-event"></i> Single Date
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if mode=='range' %}active{% endif %}" href="/?mode=range&start={{ selected_start }}&end={{ selected_end }}">
+                    <i class="bi bi-calendar-range"></i> Custom Range
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if mode=='last7' %}active{% endif %}" href="/?mode=last7">
+                    <i class="bi bi-calendar-week"></i> Last 7 Days
+                </a>
+            </li>
+        </ul>
+
+        {% if mode == 'single' %}
+        <form method="get" action="/" class="row g-2 align-items-center">
+            <input type="hidden" name="mode" value="single">
+            <div class="col-auto"><label class="col-form-label">Select Date:</label></div>
+            <div class="col-auto">
+                <input type="date" name="date" value="{{ selected_date }}" max="{{ today_iso }}" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> View</button>
+            </div>
+            <div class="col-auto window-label">
+                <i class="bi bi-info-circle"></i> Showing: <strong>{{ window_label }}</strong>
+            </div>
+        </form>
+        {% elif mode == 'range' %}
+        <form method="get" action="/" class="row g-2 align-items-center">
+            <input type="hidden" name="mode" value="range">
+            <div class="col-auto"><label class="col-form-label">From:</label></div>
+            <div class="col-auto">
+                <input type="date" name="start" value="{{ selected_start }}" max="{{ today_iso }}" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-auto"><label class="col-form-label">To:</label></div>
+            <div class="col-auto">
+                <input type="date" name="end" value="{{ selected_end }}" max="{{ today_iso }}" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> View</button>
+            </div>
+            <div class="col-auto window-label">
+                <i class="bi bi-info-circle"></i> Max 7 days per range. Showing: <strong>{{ window_label }}</strong>
+            </div>
+        </form>
+        {% else %}
+        <div class="window-label">
+            <i class="bi bi-info-circle"></i> Showing: <strong>{{ window_label }}</strong>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if error %}
+    <div class="alert alert-warning d-flex align-items-center" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <div><strong>API Note:</strong> {{ error }}</div>
+    </div>
+    {% endif %}
+
+    {% if mode == 'today' %}
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="Today's fresh leads">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">New / Coming</div>
+                            <div class="kpi-number text-primary">{{ kpis.new_count }}</div>
+                            <div class="small text-muted">Today's leads</div>
+                        </div>
+                        <i class="bi bi-inbox-fill kpi-icon text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="Yesterday's leads — in follow-up">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Working</div>
+                            <div class="kpi-number" style="color:#fd7e14;">{{ kpis.working_count }}</div>
+                            <div class="small text-muted">Yesterday (1 day old)</div>
+                        </div>
+                        <i class="bi bi-hourglass-split kpi-icon" style="color:#fd7e14;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+                <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="2+ days old — need follow-up">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Pending</div>
+                            <div class="kpi-number text-danger">{{ kpis.pending_count }}</div>
+                            <div class="small text-muted">2+ days</div>
+                        </div>
+                        <i class="bi bi-exclamation-circle-fill kpi-icon text-danger"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="Average leads per day">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Daily Average</div>
+                            <div class="kpi-number text-success">{{ kpis.daily_avg }}</div>
+                            <div class="small text-muted">{{ kpis.total }} leads / {{ kpis.unique_days }} day(s)</div>
+                        </div>
+                        <i class="bi bi-bar-chart-line-fill kpi-icon text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% elif mode == 'last7' %}
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="All leads in last 7 days">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Total Leads</div>
+                            <div class="kpi-number text-primary">{{ kpis.total }}</div>
+                            <div class="small text-muted">Last 7 Days</div>
+                        </div>
+                        <i class="bi bi-collection-fill kpi-icon text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="Yesterday's leads — in follow-up">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Working</div>
+                            <div class="kpi-number" style="color:#fd7e14;">{{ kpis.working_count }}</div>
+                            <div class="small text-muted">Yesterday (1 day old)</div>
+                        </div>
+                        <i class="bi bi-hourglass-split kpi-icon" style="color:#fd7e14;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+                <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="2+ days old — need follow-up">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Pending</div>
+                            <div class="kpi-number text-danger">{{ kpis.pending_count }}</div>
+                            <div class="small text-muted">2+ days</div>
+                        </div>
+                        <i class="bi bi-exclamation-circle-fill kpi-icon text-danger"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="Average leads per day">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Daily Average</div>
+                            <div class="kpi-number text-success">{{ kpis.daily_avg }}</div>
+                            <div class="small text-muted">{{ kpis.total }} leads / {{ kpis.span_days }} day(s)</div>
+                        </div>
+                        <i class="bi bi-bar-chart-line-fill kpi-icon text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="All leads in selected period">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Total Leads</div>
+                            <div class="kpi-number text-primary">{{ kpis.total }}</div>
+                            <div class="small text-muted">In selected period</div>
+                        </div>
+                        <i class="bi bi-collection-fill kpi-icon text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="Pending in {{ window_label }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Pending</div>
+                            <div class="kpi-number text-danger">{{ kpis.pending_count }}</div>
+                            <div class="small text-muted">{{ window_label }}</div>
+                        </div>
+                        <i class="bi bi-exclamation-circle-fill kpi-icon text-danger"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card kpi-card kpi-hover"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="Average leads per day">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="kpi-label">Daily Average</div>
+                            <div class="kpi-number text-success">{{ kpis.daily_avg }}</div>
+                            <div class="small text-muted">{{ kpis.total }} leads / {{ kpis.span_days }} day(s)</div>
+                        </div>
+                        <i class="bi bi-bar-chart-line-fill kpi-icon text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if (city_breakdown and city_breakdown|length >= 2) or hour_breakdown %}
+    <div class="row g-4 mb-4">
+        {% if city_breakdown and city_breakdown|length >= 2 %}
+        <div class="{% if hour_breakdown %}col-md-7{% else %}col-md-12{% endif %}">
+            <div class="card kpi-card h-100">
+                <div class="card-body">
+                    <h5 class="mb-1">
+                        <i class="bi bi-geo-alt-fill text-primary"></i> Cities Breakdown
+                        <small class="text-muted ms-2">— {{ window_label }}</small>
+                    </h5>
+                    <p class="small text-muted mb-3">
+                        {{ city_breakdown|length }} cities · {{ city_breakdown|sum(attribute='count') }} leads with city
+                        {% if city_breakdown|length > 6 %}<span class="text-info">· scroll for more ↓</span>{% endif %}
+                    </p>
+                    <div class="city-scroll">
+                        <div id="cityChartWrap" data-rows="{{ city_breakdown|length }}">
+                            <canvas id="cityChart"></canvas>
+                        </div>
+                    </div>
+                    <script id="cityChartData" type="application/json">{{ city_breakdown | tojson }}</script>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% if hour_breakdown %}
+        <div class="{% if city_breakdown and city_breakdown|length >= 2 %}col-md-5{% else %}col-md-12{% endif %}">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="mb-1">
+                        <i class="bi bi-clock-fill text-warning"></i>
+                        {% if hour_breakdown.is_averaged %}Typical Day Pattern{% else %}Time Distribution{% endif %}
+                        <small class="text-muted ms-2">— {{ window_label }}</small>
+                    </h5>
+                    <p class="small text-muted mb-3">
+                        {% if hour_breakdown.is_averaged %}
+                            Average leads per period, across {{ hour_breakdown.span_days }} days
+                        {% else %}
+                            When leads come in (by time of day)
+                        {% endif %}
+                    </p>
+                    <div id="hourChartWrap" class="flex-grow-1">
+                        <canvas id="hourChart"></canvas>
+                    </div>
+                    <div class="text-center mt-3 pt-2 border-top">
+                        <span class="small text-muted">
+                            🔥 {% if hour_breakdown.is_averaged %}Typical peak:{% else %}Peak hour:{% endif %}
+                        </span>
+                        <strong class="text-danger">{{ hour_breakdown.peak_hour }}</strong>
+                        <span class="small text-muted">
+                            ({{ hour_breakdown.peak_count }}{% if hour_breakdown.is_averaged %} avg leads/day{% else %} leads{% endif %})
+                        </span>
+                    </div>
+                    <script id="hourChartData" type="application/json">{{ hour_breakdown | tojson }}</script>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-ul"></i>
+                    {% if mode == 'today' %}
+                        Recent Leads ({{ leads|length }}) — Last 7 days
+                    {% else %}
+                        Leads ({{ leads|length }}) — {{ window_label }}
+                    {% endif %}
+                </h5>
+                {% if leads %}
+                <a href="/export?mode={{ mode }}{% if mode=='single' %}&date={{ selected_date }}{% elif mode=='range' %}&start={{ selected_start }}&end={{ selected_end }}{% endif %}"
+                   class="btn btn-success btn-sm">
+                    <i class="bi bi-file-earmark-excel"></i> Export
+                </a>
+                {% endif %}
+            </div>
+            {% if leads %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Status</th>
+                            <th>Name</th>
+                            <th>Mobile</th>
+                            <th>Subject / Product</th>
+                            <th>Query Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% macro clean(v) -%}
+                            {%- if not v or v in ['<nil>', 'nil', 'None', 'null'] -%}—{%- else -%}{{ v }}{%- endif -%}
+                        {%- endmacro %}
+                        {% for lead in leads %}
+                        {% set qt = lead.get('QUERY_TIME','') %}
+                        {% set name = clean(lead.get('SENDER_NAME')) %}
+                        {% set mob = clean(lead.get('SENDER_MOBILE')) %}
+                        {% set raw_subj = lead.get('SUBJECT') or lead.get('QUERY_PRODUCT_NAME') %}
+                        {% set subj = clean(raw_subj) %}
+                        <tr>
+                            <td>
+                                {% set status = lead.get('_status','NEW') %}
+                                {% if status == 'NEW' %}
+                                    <span class="badge badge-new">New</span>
+                                {% elif status == 'WORKING' %}
+                                    <span class="badge badge-working">Working</span>
+                                {% else %}
+                                    <span class="badge badge-pending">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ name }}</td>
+                            <td>{{ mob }}</td>
+                            <td>{{ subj }}</td>
+                            <td><small class="text-muted">{{ qt }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">
+                <i class="bi bi-info-circle"></i>
+                {% if not ok %}
+                    Unable to call the API right now. Click the Sync button or try again after a few minutes.
+                {% else %}
+                    No leads in this period.
+                {% endif %}
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="text-center mt-4 mb-4">
+        <small class="text-muted">
+            <i class="bi bi-info-circle"></i>
+            IndiaMART API limit: 7 days window, 1 call per 5 min. Each range cached separately for 5 min.
+        </small>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function (el) {
+            new bootstrap.Tooltip(el);
+        });
+
+        var btn = document.getElementById('sync-btn');
+        var timer = document.getElementById('cooldown-timer');
+        if (btn && timer) {
+            var remaining = parseInt(btn.getAttribute('data-cooldown')) || 0;
+            var iv = setInterval(function () {
+                remaining -= 1;
+                if (remaining <= 0) {
+                    clearInterval(iv);
+                    location.reload();
+                    return;
+                }
+                timer.textContent = remaining;
+            }, 1000);
+        }
+
+        var wrap = document.getElementById('cityChartWrap');
+        var canvas = document.getElementById('cityChart');
+        var dataTag = document.getElementById('cityChartData');
+        if (wrap && canvas && dataTag && window.Chart) {
+            var rows = parseInt(wrap.getAttribute('data-rows')) || 5;
+            wrap.style.height = (rows * 28 + 30) + 'px';
+
+            var cityData = JSON.parse(dataTag.textContent || '[]');
+            new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: cityData.map(function (c) { return c.city; }),
+                    datasets: [{
+                        label: 'Leads',
+                        data: cityData.map(function (c) { return c.count; }),
+                        backgroundColor: 'rgba(13, 110, 253, 0.75)',
+                        borderColor: 'rgba(13, 110, 253, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (ctx) { return ctx.parsed.x + ' leads'; }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { precision: 0 } },
+                        y: { ticks: { autoSkip: false, font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        var hourCanvas = document.getElementById('hourChart');
+        var hourTag = document.getElementById('hourChartData');
+        if (hourCanvas && hourTag && window.Chart) {
+            var hd = JSON.parse(hourTag.textContent || '{}');
+            var periods = hd.periods || [];
+            var unitSuffix = hd.is_averaged ? ' avg leads/day' : ' leads';
+            new Chart(hourCanvas, {
+                type: 'doughnut',
+                data: {
+                    labels: periods.map(function (p) { return p.label; }),
+                    datasets: [{
+                        data: periods.map(function (p) { return p.count; }),
+                        backgroundColor: periods.map(function (p) { return p.color; }),
+                        borderWidth: 2,
+                        borderColor: '#fff',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { font: { size: 11 }, boxWidth: 12, padding: 8 }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (ctx) {
+                                    var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+                                    var pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(0) : 0;
+                                    return ctx.label + ': ' + ctx.parsed + unitSuffix + ' (' + pct + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
+</script>
+
+</body>
+</html>

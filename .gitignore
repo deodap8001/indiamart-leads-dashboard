@@ -1,0 +1,28 @@
+# Environment / Secrets — NEVER COMMIT
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+# Debug / Test files
+_test*.html
+_t.html
+_l.html
+_r.html
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
