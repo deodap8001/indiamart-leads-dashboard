@@ -528,6 +528,18 @@
             wrap.style.height = (rows * 28 + 30) + 'px';
 
             var cityData = JSON.parse(dataTag.textContent || '[]');
+            var cityPalette = [
+                '#0d6efd', '#fd7e14', '#198754', '#dc3545', '#6f42c1',
+                '#20c997', '#ffc107', '#d63384', '#0dcaf0', '#6610f2',
+                '#e83e8c', '#17a2b8', '#28a745', '#ff6b35', '#5e60ce',
+                '#56cfe1', '#ff5e78', '#80b918', '#f28482', '#9b5de5'
+            ];
+            var bgColors = cityData.map(function (_, i) {
+                return cityPalette[i % cityPalette.length] + 'cc';
+            });
+            var borderColors = cityData.map(function (_, i) {
+                return cityPalette[i % cityPalette.length];
+            });
             new Chart(canvas, {
                 type: 'bar',
                 data: {
@@ -535,8 +547,8 @@
                     datasets: [{
                         label: 'Leads',
                         data: cityData.map(function (c) { return c.count; }),
-                        backgroundColor: 'rgba(13, 110, 253, 0.75)',
-                        borderColor: 'rgba(13, 110, 253, 1)',
+                        backgroundColor: bgColors,
+                        borderColor: borderColors,
                         borderWidth: 1,
                         borderRadius: 4,
                     }]
