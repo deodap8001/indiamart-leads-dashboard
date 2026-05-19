@@ -1,20 +1,245 @@
 import csv
 import io
+import os
 import re
 from collections import Counter
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
 
+from auth import any_users_exist, get_current_user, hash_password, login_user, logout_user, verify_password
+from database import get_db, start_tunnel_and_engine, stop_tunnel
 from indiamart_client import fetch_leads, parse_query_time
+from models import User
+
+load_dotenv()
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-app = FastAPI(title="IndiaMART Lead Dashboard")
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-me")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_tunnel_and_engine()
+    yield
+    stop_tunnel()
+
+
+app = FastAPI(title="IndiaMART Lead Dashboard", lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=60 * 60 * 24 * 7)
+
+
+def require_login(request: Request, db: Session = Depends(get_db)) -> User:
+    user = get_current_user(request, db)
+    if user is None:
+        raise RedirectException("/login")
+    return user
+
+
+def require_admin(request: Request, db: Session = Depends(get_db)) -> User:
+    user = get_current_user(request, db)
+    if user is None:
+        raise RedirectException("/login")
+    if not user.is_admin:
+        raise RedirectException("/")
+    return user
+
+
+class RedirectException(Exception):
+    def __init__(self, url: str):
+        self.url = url
+
+
+@app.exception_handler(RedirectException)
+async def redirect_exception_handler(request: Request, exc: RedirectException):
+    return RedirectResponse(url=exc.url, status_code=303)
+
+
+# --------------------------- AUTH ROUTES ---------------------------
+
+
+@app.get("/login")
+def login_form(request: Request, db: Session = Depends(get_db)):
+    if get_current_user(request, db):
+        return RedirectResponse("/", status_code=303)
+
+    first_setup = not any_users_exist(db)
+    if first_setup:
+        return RedirectResponse("/register", status_code=303)
+
+    return templates.TemplateResponse("login.html", {"request": request, "first_setup": False})
+
+
+@app.post("/login")
+def login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.username == username.strip()).first()
+    if user is None or not verify_password(password, user.password_hash):
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": "Invalid username or password", "username": username},
+            status_code=400,
+        )
+
+    login_user(request, user)
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/logout")
+def logout(request: Request):
+    logout_user(request)
+    return RedirectResponse("/login", status_code=303)
+
+
+@app.get("/change-password")
+def change_password_form(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_user(request, db)
+    if current_user is None:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(
+        "change_password.html",
+        {"request": request, "current_user": current_user},
+    )
+
+
+@app.post("/change-password")
+def change_password_submit(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    new_password_confirm: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    current_user = get_current_user(request, db)
+    if current_user is None:
+        return RedirectResponse("/login", status_code=303)
+
+    def render(error: str | None = None, success: str | None = None, status_code: int = 200):
+        return templates.TemplateResponse(
+            "change_password.html",
+            {"request": request, "current_user": current_user, "error": error, "success": success},
+            status_code=status_code,
+        )
+
+    if not verify_password(current_password, current_user.password_hash):
+        return render(error="Current password is incorrect.", status_code=400)
+
+    if len(new_password) < 6:
+        return render(error="New password must be at least 6 characters.", status_code=400)
+
+    if new_password != new_password_confirm:
+        return render(error="New password and confirmation do not match.", status_code=400)
+
+    if verify_password(new_password, current_user.password_hash):
+        return render(error="New password must be different from the current password.", status_code=400)
+
+    current_user.password_hash = hash_password(new_password)
+    db.commit()
+
+    return render(success="Password updated successfully.")
+
+
+@app.get("/register")
+def register_form(request: Request, db: Session = Depends(get_db)):
+    first_setup = not any_users_exist(db)
+    current_user = get_current_user(request, db)
+
+    if not first_setup:
+        if current_user is None:
+            return RedirectResponse("/login", status_code=303)
+        if not current_user.is_admin:
+            return RedirectResponse("/", status_code=303)
+
+    return templates.TemplateResponse(
+        "register.html",
+        {"request": request, "first_setup": first_setup, "current_user": current_user},
+    )
+
+
+@app.post("/register")
+def register_submit(
+    request: Request,
+    username: str = Form(...),
+    full_name: str = Form(""),
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+    is_admin: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    first_setup = not any_users_exist(db)
+    current_user = get_current_user(request, db)
+
+    if not first_setup:
+        if current_user is None:
+            return RedirectResponse("/login", status_code=303)
+        if not current_user.is_admin:
+            return RedirectResponse("/", status_code=303)
+
+    def render_error(msg: str):
+        return templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "first_setup": first_setup,
+                "current_user": current_user,
+                "error": msg,
+                "form_username": username,
+                "form_full_name": full_name,
+            },
+            status_code=400,
+        )
+
+    username_clean = username.strip()
+    if len(username_clean) < 3:
+        return render_error("Username must be at least 3 characters.")
+    if password != password_confirm:
+        return render_error("Passwords do not match.")
+    if len(password) < 6:
+        return render_error("Password must be at least 6 characters.")
+
+    existing = db.query(User).filter(User.username == username_clean).first()
+    if existing:
+        return render_error(f"Username '{username_clean}' is already taken.")
+
+    new_user = User(
+        username=username_clean,
+        password_hash=hash_password(password),
+        full_name=full_name.strip() or None,
+        is_admin=first_setup or is_admin == "1",
+        created_by_id=current_user.id if current_user else None,
+    )
+    db.add(new_user)
+    db.commit()
+
+    if first_setup:
+        login_user(request, new_user)
+        return RedirectResponse("/", status_code=303)
+
+    return templates.TemplateResponse(
+        "register.html",
+        {
+            "request": request,
+            "first_setup": False,
+            "current_user": current_user,
+            "success": f"User '{new_user.username}' created successfully.",
+        },
+    )
+
+
+# --------------------------- DASHBOARD LOGIC ---------------------------
 
 
 def classify_status(query_time_str: str, today: datetime) -> str:
@@ -209,8 +434,24 @@ def build_city_breakdown(leads: list[dict], top_n: int | None = None) -> list[di
     return [{"city": c, "count": n} for c, n in top]
 
 
+# --------------------------- DASHBOARD ROUTES ---------------------------
+
+
 @app.get("/")
-def dashboard(request: Request, mode: str = "today", date: str | None = None, start: str | None = None, end: str | None = None):
+def dashboard(
+    request: Request,
+    mode: str = "today",
+    date: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    db: Session = Depends(get_db),
+):
+    current_user = get_current_user(request, db)
+    if current_user is None:
+        if not any_users_exist(db):
+            return RedirectResponse("/register", status_code=303)
+        return RedirectResponse("/login", status_code=303)
+
     if mode not in ("today", "single", "range", "last7"):
         mode = "today"
 
@@ -272,6 +513,7 @@ def dashboard(request: Request, mode: str = "today", date: str | None = None, st
             "cooldown_remaining": result.get("cooldown_remaining", 0),
             "city_breakdown": city_breakdown,
             "hour_breakdown": hour_breakdown,
+            "current_user": current_user,
         },
     )
 
@@ -307,7 +549,17 @@ def clean_cell(value) -> str:
 
 
 @app.get("/export")
-def export_csv(mode: str = "today", date: str | None = None, start: str | None = None, end: str | None = None):
+def export_csv(
+    request: Request,
+    mode: str = "today",
+    date: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    db: Session = Depends(get_db),
+):
+    if get_current_user(request, db) is None:
+        return RedirectResponse("/login", status_code=303)
+
     if mode not in ("today", "single", "range", "last7"):
         mode = "today"
 
@@ -348,7 +600,17 @@ def export_csv(mode: str = "today", date: str | None = None, start: str | None =
 
 
 @app.get("/sync")
-def sync(mode: str = "today", date: str | None = None, start: str | None = None, end: str | None = None):
+def sync(
+    request: Request,
+    mode: str = "today",
+    date: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    db: Session = Depends(get_db),
+):
+    if get_current_user(request, db) is None:
+        return RedirectResponse("/login", status_code=303)
+
     start_dt, end_dt, _ = resolve_window(mode, date, start, end)
     now = datetime.now()
     last7_start = datetime(now.year, now.month, now.day) - timedelta(days=6)
@@ -377,4 +639,4 @@ if __name__ == "__main__":
     url = "http://127.0.0.1:8000"
     print(f"\nIndiaMART Lead Dashboard starting at {url}\n")
     webbrowser.open(url)
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False)

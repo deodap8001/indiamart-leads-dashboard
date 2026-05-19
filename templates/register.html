@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Create User — IndiaMART Lead Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background: #f4f6fa; }
+        .reg-card { border-radius: 14px; border: none; box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
+    </style>
+</head>
+<body>
+
+{% if not first_setup %}
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container">
+        <a class="navbar-brand mb-0 h1 text-decoration-none" href="/">
+            <i class="bi bi-graph-up-arrow"></i> IndiaMART Lead Dashboard
+        </a>
+        <div>
+            <span class="text-light small me-3">
+                <i class="bi bi-person-shield"></i> {{ current_user.username }} (admin)
+            </span>
+            <a href="/" class="btn btn-sm btn-outline-light me-2">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+            <a href="/logout" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-box-arrow-right"></i> Logout
+            </a>
+        </div>
+    </div>
+</nav>
+{% endif %}
+
+<div class="container" style="max-width: 600px;">
+    <div class="card reg-card">
+        <div class="card-body p-4 p-md-5">
+            <h4 class="mb-1">
+                {% if first_setup %}
+                    <i class="bi bi-shield-fill-check text-warning"></i> Create Admin Account
+                {% else %}
+                    <i class="bi bi-person-plus-fill text-primary"></i> Create New User
+                {% endif %}
+            </h4>
+            <p class="text-muted small mb-4">
+                {% if first_setup %}
+                    First-time setup. This account will have admin privileges.
+                {% else %}
+                    Add a new user to the dashboard. They can sign in with the credentials you set here.
+                {% endif %}
+            </p>
+
+            {% if error %}
+            <div class="alert alert-danger py-2 small">
+                <i class="bi bi-exclamation-circle"></i> {{ error }}
+            </div>
+            {% endif %}
+
+            {% if success %}
+            <div class="alert alert-success py-2 small">
+                <i class="bi bi-check-circle"></i> {{ success }}
+            </div>
+            {% endif %}
+
+            <form method="post" action="/register">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Username <span class="text-danger">*</span></label>
+                    <input type="text" name="username" class="form-control" required minlength="3" maxlength="50" value="{{ form_username or '' }}" autofocus>
+                    <div class="form-text small">3-50 characters, must be unique.</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Full Name</label>
+                    <input type="text" name="full_name" class="form-control" maxlength="100" value="{{ form_full_name or '' }}">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Password <span class="text-danger">*</span></label>
+                    <input type="password" name="password" class="form-control" required minlength="6">
+                    <div class="form-text small">Minimum 6 characters.</div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label small fw-semibold">Confirm Password <span class="text-danger">*</span></label>
+                    <input type="password" name="password_confirm" class="form-control" required minlength="6">
+                </div>
+
+                {% if not first_setup %}
+                <div class="form-check mb-4">
+                    <input class="form-check-input" type="checkbox" name="is_admin" id="is_admin" value="1">
+                    <label class="form-check-label small" for="is_admin">
+                        Make this user an admin (can create more users)
+                    </label>
+                </div>
+                {% endif %}
+
+                <button type="submit" class="btn btn-primary w-100 fw-semibold">
+                    {% if first_setup %}
+                        <i class="bi bi-shield-fill-check"></i> Create Admin Account
+                    {% else %}
+                        <i class="bi bi-person-plus-fill"></i> Create User
+                    {% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+</html>

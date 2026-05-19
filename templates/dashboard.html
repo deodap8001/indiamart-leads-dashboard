@@ -74,9 +74,9 @@
         <span class="navbar-brand mb-0 h1">
             <i class="bi bi-graph-up-arrow"></i> IndiaMART Lead Dashboard
         </span>
-        <div>
+        <div class="d-flex align-items-center gap-2">
             {% if last_sync %}
-                <span class="text-light me-3 small">Last sync: {{ last_sync }}</span>
+                <span class="text-light me-2 small d-none d-md-inline">Last sync: {{ last_sync }}</span>
             {% endif %}
             {% if cooldown_remaining and cooldown_remaining > 0 %}
                 <button class="btn btn-sm btn-outline-light" disabled
@@ -87,6 +87,43 @@
                 <a href="/sync?mode={{ mode }}{% if mode=='single' %}&date={{ selected_date }}{% elif mode=='range' %}&start={{ selected_start }}&end={{ selected_end }}{% endif %}" class="btn btn-sm btn-outline-light">
                     <i class="bi bi-arrow-clockwise"></i> Sync Now
                 </a>
+            {% endif %}
+            {% if current_user %}
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        {% if current_user.is_admin %}
+                            <i class="bi bi-person-shield"></i>
+                        {% else %}
+                            <i class="bi bi-person-circle"></i>
+                        {% endif %}
+                        {{ current_user.username }}
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li class="dropdown-item-text small text-muted">
+                            {{ current_user.full_name or current_user.username }}
+                            {% if current_user.is_admin %}<span class="badge bg-warning text-dark ms-1">Admin</span>{% endif %}
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        {% if current_user.is_admin %}
+                        <li>
+                            <a class="dropdown-item" href="/register">
+                                <i class="bi bi-person-plus"></i> Create user
+                            </a>
+                        </li>
+                        {% endif %}
+                        <li>
+                            <a class="dropdown-item" href="/change-password">
+                                <i class="bi bi-shield-lock"></i> Change password
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-danger" href="/logout">
+                                <i class="bi bi-box-arrow-right"></i> Logout
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             {% endif %}
         </div>
     </div>

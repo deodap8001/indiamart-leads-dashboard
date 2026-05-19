@@ -17,6 +17,12 @@ _test*.html
 _t.html
 _l.html
 _r.html
+_test*.py
+_setup*.py
+
+# SSH keys — NEVER commit
+*.pem
+*.key
 
 # IDE
 .vscode/
