@@ -1,25 +1,27 @@
 # IndiaMART Leads Dashboard
 
-A FastAPI-based web dashboard that fetches and visualises lead enquiries from the IndiaMART CRM API. Built to give a sales team an at-a-glance view of incoming leads, geographic distribution, and time-of-day patterns.
+A Streamlit-based web dashboard that fetches and visualises lead enquiries from the IndiaMART CRM API. Built to give a sales team an at-a-glance view of incoming leads, geographic distribution, and time-of-day patterns.
 
 ## Features
 
 - **4 view modes** — Today / Single Date / Custom Range / Last 7 Days
-- **KPI cards** — New, Working, Pending, Daily Average
-- **Cities Breakdown** — horizontal bar chart of all cities (scrollable)
-- **Time Distribution / Typical Day Pattern** — doughnut chart with peak-hour detection
+- **KPI cards** — Total, New, Working, Pending, Daily Average
+- **Cities Breakdown** — colorful horizontal bar chart (top 10 visible + scroll)
+- **Time Distribution** — interactive donut chart (Morning / Afternoon / Evening / Night) with peak-hour highlight
   - Today / Single → actual counts
   - Range / Last 7 → average per day (smooths weekday/weekend mix)
 - **CSV export** of filtered leads
 - **Smart caching** — 5-minute in-memory cache per date range
-- **Rate-limit aware** — respects IndiaMART's 1-call-per-5-min limit with a client-side cooldown
+- **Rate-limit aware** — respects IndiaMART's 1-call-per-5-min limit with live countdown banner
+- **Light / Dark mode toggle** in sidebar
 - **Auto-sync indicator** — last-sync timestamp, manual "Sync Now" button
 
 ## Tech Stack
 
-- **Backend**: FastAPI + Jinja2
-- **Frontend**: Bootstrap 5, Bootstrap Icons, Chart.js 4
+- **Frontend & Backend**: Streamlit
+- **Charts**: Plotly (interactive bar + donut)
 - **HTTP client**: httpx
+- **Data**: pandas
 - **Config**: python-dotenv
 
 ## Setup
@@ -32,7 +34,7 @@ A FastAPI-based web dashboard that fetches and visualises lead enquiries from th
 ### Install
 
 ```bash
-git clone https://github.com/rd-deodap/indiamart-leads-dashboard.git
+git clone https://github.com/deodap8001/indiamart-leads-dashboard.git
 cd indiamart-leads-dashboard
 pip install -r requirements.txt
 ```
@@ -54,21 +56,21 @@ INDIAMART_API_KEY=your_glusr_crm_key_here
 ### Run
 
 ```bash
-python main.py
+streamlit run streamlit_app.py
 ```
 
-The dashboard opens automatically at <http://127.0.0.1:8000>.
+The dashboard opens automatically at <http://localhost:8501>.
 
 ## Project Structure
 
 ```
 .
-├── main.py                  # FastAPI app, routes, KPI/chart logic
+├── streamlit_app.py         # Streamlit UI — KPIs, charts, table, export
 ├── indiamart_client.py      # API client with caching + rate-limit guard
-├── templates/
-│   └── dashboard.html       # Single-page Bootstrap UI
 ├── requirements.txt
 ├── .env.example             # Template for environment variables
+├── .streamlit/
+│   └── secrets.toml.example # Template for Streamlit Cloud deployment
 └── .gitignore
 ```
 
@@ -76,18 +78,19 @@ The dashboard opens automatically at <http://127.0.0.1:8000>.
 
 - IndiaMART API endpoint: `https://mapi.indiamart.com/wservce/crm/crmListing/v2/`
 - **7-day maximum** window per request
-- **1 call per 5 minutes** rate limit (enforced by client)
+- **1 call per 5 minutes** rate limit (enforced by client with a 5:15 cooldown)
 - The app caches each unique date range separately for 5 minutes
 
-## Routes
+## Deployment (Streamlit Community Cloud)
 
-| Route     | Method | Purpose                              |
-|-----------|--------|--------------------------------------|
-| `/`       | GET    | Dashboard view                       |
-| `/sync`   | GET    | Force-refresh from API (bypass cache)|
-| `/export` | GET    | Download leads as CSV                |
-
-Query parameters: `mode`, `date`, `start`, `end`
+1. Push this repo to GitHub.
+2. Go to <https://share.streamlit.io>, sign in with GitHub, and select this repo.
+3. Set the main file path to `streamlit_app.py`.
+4. In the app's **Settings → Secrets**, add:
+   ```toml
+   INDIAMART_API_KEY = "your_glusr_crm_key_here"
+   ```
+5. Deploy — Streamlit Cloud will install from `requirements.txt` and launch the app.
 
 ## License
 
