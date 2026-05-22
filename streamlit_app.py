@@ -841,8 +841,12 @@ st.markdown(kpi_html, unsafe_allow_html=True)
 # -----------------------------
 # Charts row
 # -----------------------------
-chart_leads = leads
-chart_span = span_days
+if mode == "today":
+    chart_leads = filter_leads_to_window(all_leads, today_end, today_end)
+    chart_span = 1
+else:
+    chart_leads = leads
+    chart_span = span_days
 
 city_breakdown = build_city_breakdown(chart_leads)
 hour_breakdown = build_hour_breakdown(chart_leads, span_days=chart_span)
