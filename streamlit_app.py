@@ -644,9 +644,15 @@ with st.sidebar:
 
     if mode == "single":
         picked = st.date_input("Date", value=today_date, max_value=today_date)
-        start_dt = datetime(picked.year, picked.month, picked.day)
-        end_dt = start_dt
-        window_label = start_dt.strftime("%d-%b-%Y")
+        if picked == today_date:
+            mode = "today"
+            start_dt = datetime(last7_start.year, last7_start.month, last7_start.day)
+            end_dt = datetime(today.year, today.month, today.day)
+            window_label = "Today + Open"
+        else:
+            start_dt = datetime(picked.year, picked.month, picked.day)
+            end_dt = start_dt
+            window_label = start_dt.strftime("%d-%b-%Y")
     elif mode == "range":
         default_start = today_date - timedelta(days=6)
         picked = st.date_input(
