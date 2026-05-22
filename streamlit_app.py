@@ -671,9 +671,9 @@ with st.sidebar:
         end_dt = datetime(today.year, today.month, today.day)
         window_label = "Last 7 Days"
     else:
-        start_dt = datetime(today.year, today.month, today.day)
-        end_dt = start_dt
-        window_label = "Today"
+        start_dt = datetime(last7_start.year, last7_start.month, last7_start.day)
+        end_dt = datetime(today.year, today.month, today.day)
+        window_label = "Today + Open"
 
     st.divider()
     sync_clicked = st.button("🔄 Sync Now", width="stretch", type="primary")
@@ -697,8 +697,8 @@ else:
 all_leads = result.get("leads", [])
 
 if mode == "today":
-    leads = filter_leads_to_window(all_leads, today_end, today_end) if within_last_7 else all_leads
-    span_days = 1
+    leads = all_leads
+    span_days = 7
 else:
     leads = filter_leads_to_window(all_leads, start_dt, end_dt)
     span_days = (end_dt.date() - start_dt.date()).days + 1
@@ -835,12 +835,8 @@ st.markdown(kpi_html, unsafe_allow_html=True)
 # -----------------------------
 # Charts row
 # -----------------------------
-if mode == "today":
-    chart_leads = filter_leads_to_window(all_leads, today_end, today_end)
-    chart_span = 1
-else:
-    chart_leads = leads
-    chart_span = span_days
+chart_leads = leads
+chart_span = span_days
 
 city_breakdown = build_city_breakdown(chart_leads)
 hour_breakdown = build_hour_breakdown(chart_leads, span_days=chart_span)
